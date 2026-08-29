@@ -977,6 +977,13 @@
   min-width: 140px;
   max-width: calc(100vw - 32px);
   animation: motivation-pop-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.floating-timer:active {
+  cursor: grabbing;
 }
 
 .floating-timer-top {
