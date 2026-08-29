@@ -13,6 +13,10 @@ dist-ssr
 *.local
 .env
 
+# Contains a personal-use-only licensed font and account recovery codes --
+# must never be committed or pushed.
+additional files/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

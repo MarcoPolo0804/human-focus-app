@@ -8,11 +8,13 @@ import NicknamePrompt from './components/NicknamePrompt';
 import MilestoneModal from './components/MilestoneModal';
 import FocusTogether from './components/FocusTogether';
 import MotivationSpark from './components/MotivationSpark';
+import AppInfo from './components/AppInfo';
 import { STAGES, TOTAL_LIFE_POINTS, stageIndexForPoints } from './stages';
 import { upsertMyStats } from './lib/leaderboard';
 import './App.css';
 
 const STORAGE_KEY = 'human-focus-app-state';
+const REST_BG = '#E6E1F9';
 
 function loadState() {
   try {
@@ -61,6 +63,7 @@ export default function App() {
   const [pendingRoomCode, setPendingRoomCode] = useState(() => new URLSearchParams(window.location.search).get('room'));
   const [pendingAction, setPendingAction] = useState(null);
   const [milestoneStage, setMilestoneStage] = useState(null);
+  const [resting, setResting] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -185,8 +188,9 @@ export default function App() {
           onViewLeaderboard={openLeaderboard}
         />
       ) : (
-        <div className="app" style={{ background: stage.bg }}>
+        <div className="app" style={{ background: resting ? REST_BG : stage.bg }}>
           <MotivationSpark />
+          <AppInfo />
           <header className="app-header">
             <h1>Human Focus</h1>
             <p className="subtitle">Keep them alive, one focus session at a time.</p>
@@ -210,7 +214,7 @@ export default function App() {
 
             <LifeBar lifePoints={state.life.lifePoints} />
 
-            <Timer onComplete={handleComplete} onAbandon={handleAbandon} />
+            <Timer onComplete={handleComplete} onAbandon={handleAbandon} onRestChange={setResting} />
 
             <div className="stats-row">
               <div className="stat">

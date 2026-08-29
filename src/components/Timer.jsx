@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { ensureAudioContext, playAlarm } from '../lib/sound';
+
+const REST_SECONDS = 10 * 60;
 
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -6,41 +9,51 @@ function formatTime(totalSeconds) {
   return `${m}:${s}`;
 }
 
-export default function Timer({ onComplete, onAbandon }) {
+export default function Timer({ onComplete, onAbandon, onRestChange }) {
   const [minutes, setMinutes] = useState(25);
+  const [phase, setPhase] = useState('setup'); // 'setup' | 'focus' | 'rest'
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
-  const [running, setRunning] = useState(false);
   const intervalRef = useRef(null);
 
   useEffect(() => {
-    if (!running) return undefined;
+    if (phase === 'setup') return undefined;
     intervalRef.current = setInterval(() => {
       setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(intervalRef.current);
-  }, [running]);
+  }, [phase]);
 
   useEffect(() => {
-    if (running && secondsLeft === 0) {
-      setRunning(false);
+    if (phase === 'focus' && secondsLeft === 0) {
+      playAlarm();
       onComplete(minutes);
+      setPhase('rest');
+      setSecondsLeft(REST_SECONDS);
+    } else if (phase === 'rest' && secondsLeft === 0) {
+      playAlarm();
+      setPhase('setup');
     }
-  }, [running, secondsLeft, onComplete, minutes]);
+  }, [phase, secondsLeft, onComplete, minutes]);
+
+  useEffect(() => {
+    onRestChange?.(phase === 'rest');
+  }, [phase, onRestChange]);
 
   const start = () => {
+    ensureAudioContext(); // grabbed inside this click handler so the later alarm is allowed to play
     setSecondsLeft(minutes * 60);
-    setRunning(true);
+    setPhase('focus');
   };
 
   const abandon = () => {
     clearInterval(intervalRef.current);
-    setRunning(false);
+    setPhase('setup');
     onAbandon();
   };
 
   return (
     <div className="timer">
-      {!running ? (
+      {phase === 'setup' && (
         <div className="timer-setup">
           <label htmlFor="minutes">Focus duration (minutes)</label>
           <input
@@ -55,12 +68,20 @@ export default function Timer({ onComplete, onAbandon }) {
             Start Focus Session
           </button>
         </div>
-      ) : (
+      )}
+      {phase === 'focus' && (
         <div className="timer-running">
           <div className="timer-display">{formatTime(secondsLeft)}</div>
           <button className="btn btn-danger" onClick={abandon}>
             Abandon Session
           </button>
+        </div>
+      )}
+      {phase === 'rest' && (
+        <div className="timer-resting">
+          <p className="timer-rest-label">🌙 Resting</p>
+          <div className="timer-display">{formatTime(secondsLeft)}</div>
+          <p className="timer-rest-hint">A fixed 10-minute break before your next session.</p>
         </div>
       )}
     </div>

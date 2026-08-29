@@ -38,3 +38,21 @@ create index if not exists leaderboard_focus_minutes_idx
 
 create index if not exists leaderboard_sessions_idx
   on public.leaderboard (lifetime_sessions_completed desc);
+
+create extension if not exists pgcrypto;
+
+create table if not exists public.feedback (
+  id uuid primary key default gen_random_uuid(),
+  player_id uuid,
+  message text not null check (char_length(message) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+
+alter table public.feedback enable row level security;
+
+-- Suggestion box, not a public wall: anyone can submit feedback, but there is
+-- no select policy, so the anon key can never read it back. Review it in the
+-- Supabase dashboard's Table Editor (which uses your service role, bypassing RLS).
+create policy "Anyone can submit feedback"
+  on public.feedback for insert
+  with check (true);
