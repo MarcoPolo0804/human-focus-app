@@ -18,6 +18,7 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
   const [durationMinutes, setDurationMinutes] = useState(25);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
 
   const channelRef = useRef(null);
   const sessionStartRef = useRef(null);
@@ -25,6 +26,8 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
   const completedRef = useRef(false);
 
   const joinChannel = (code) => {
+    setConnectionError(false);
+
     const channel = supabase.channel(`focus-room-${code}`, {
       config: { presence: { key: getPlayerId() }, broadcast: { self: true } },
     });
@@ -43,15 +46,27 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
 
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
+        setConnectionError(false);
         await channel.track({
           nickname,
           stageName: stage.name,
           stageEmoji: stage.milestoneEmoji,
         });
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        // The realtime socket failed to connect or dropped (flaky network, VPN/firewall
+        // blocking WebSockets, etc). Without this, the UI would hang on "Connecting…"
+        // forever with no way out.
+        setConnectionError(true);
       }
     });
 
     channelRef.current = channel;
+  };
+
+  const retryConnection = () => {
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    setParticipants([]);
+    joinChannel(roomCode);
   };
 
   useEffect(() => {
@@ -206,6 +221,7 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
             </button>
 
             <ParticipantList participants={participants} />
+            {connectionError && <ConnectionError onRetry={retryConnection} />}
 
             {isHost ? (
               <div className="timer-setup">
@@ -232,6 +248,7 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
           <div className="focus-together-active">
             <div className="timer-display">{formatTime(secondsLeft)}</div>
             <ParticipantList participants={participants} />
+            {connectionError && <ConnectionError onRetry={retryConnection} />}
             <button className="btn btn-danger" onClick={leaveSession}>
               Leave Session
             </button>
@@ -247,6 +264,17 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ConnectionError({ onRetry }) {
+  return (
+    <div className="connection-error">
+      <p>Connection trouble — this can happen on a VPN, firewall, or spotty network.</p>
+      <button className="btn btn-secondary" onClick={onRetry}>
+        Retry connection
+      </button>
     </div>
   );
 }

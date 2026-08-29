@@ -943,6 +943,23 @@
   color: #6b6375;
 }
 
+.connection-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  background: rgba(217, 83, 79, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.connection-error p {
+  font-size: 13px;
+  color: #a8433f;
+  margin: 0;
+}
+
 /* Illness indicator */
 .sick-banner {
   margin-top: 8px;
