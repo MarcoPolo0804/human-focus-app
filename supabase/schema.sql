@@ -56,3 +56,4 @@ alter table public.feedback enable row level security;
 create policy "Anyone can submit feedback"
   on public.feedback for insert
   with check (true);
+ 
