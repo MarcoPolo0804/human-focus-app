@@ -960,6 +960,60 @@
   margin: 0;
 }
 
+.floating-timer {
+  position: fixed;
+  left: 16px;
+  z-index: 45;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(6px);
+  border-radius: 20px;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 16px 36px -14px rgba(45, 42, 61, 0.35);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  max-width: calc(100vw - 32px);
+  animation: motivation-pop-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.floating-timer-top {
+  top: 16px;
+}
+
+.floating-timer-bottom {
+  bottom: 16px;
+}
+
+.floating-timer-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6a5ea8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.floating-timer-display {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #2d2a3d;
+}
+
+.floating-timer-meta {
+  font-size: 12px;
+  color: #6b6375;
+  margin: 0;
+}
+
+.floating-timer-action {
+  padding: 6px 16px;
+  font-size: 13px;
+}
+
 /* Illness indicator */
 .sick-banner {
   margin-top: 8px;

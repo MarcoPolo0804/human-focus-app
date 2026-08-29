@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getPlayerId } from '../lib/playerId';
 import { generateRoomCode, roomLinkFor } from '../lib/room';
+import FloatingTimer from './FloatingTimer';
 
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -162,6 +163,22 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
     }
   };
 
+  if (phase === 'active') {
+    return (
+      <FloatingTimer
+        position="bottom"
+        label="Focusing together"
+        time={formatTime(secondsLeft)}
+        actionLabel="Leave Session"
+        actionVariant="danger"
+        onAction={exitActiveSession}
+      >
+        <ParticipantList participants={participants} compact />
+        {connectionError && <ConnectionError onRetry={retryConnection} />}
+      </FloatingTimer>
+    );
+  }
+
   if (!isSupabaseConfigured) {
     return (
       <div className="leaderboard-overlay" onClick={onClose}>
@@ -179,15 +196,11 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
   }
 
   return (
-    <div className="leaderboard-overlay" onClick={phase !== 'active' ? onClose : undefined}>
+    <div className="leaderboard-overlay" onClick={onClose}>
       <div className="leaderboard-card" onClick={(e) => e.stopPropagation()}>
         <div className="leaderboard-header">
           <h2>Focus Together</h2>
-          <button
-            className="leaderboard-close"
-            onClick={phase === 'active' ? exitActiveSession : onClose}
-            aria-label={phase === 'active' ? 'Leave session' : 'Close'}
-          >
+          <button className="leaderboard-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
@@ -244,17 +257,6 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
           </div>
         )}
 
-        {phase === 'active' && (
-          <div className="focus-together-active">
-            <div className="timer-display">{formatTime(secondsLeft)}</div>
-            <ParticipantList participants={participants} />
-            {connectionError && <ConnectionError onRetry={retryConnection} />}
-            <button className="btn btn-danger" onClick={leaveSession}>
-              Leave Session
-            </button>
-          </div>
-        )}
-
         {phase === 'done' && (
           <div className="focus-together-done">
             <p className="leaderboard-empty">Session complete. Nice work!</p>
@@ -279,9 +281,17 @@ function ConnectionError({ onRetry }) {
   );
 }
 
-function ParticipantList({ participants }) {
+function ParticipantList({ participants, compact }) {
   if (participants.length === 0) {
-    return <p className="leaderboard-empty">Connecting…</p>;
+    return <p className={compact ? 'floating-timer-meta' : 'leaderboard-empty'}>Connecting…</p>;
+  }
+
+  if (compact) {
+    return (
+      <p className="floating-timer-meta">
+        {participants.map((p) => `${p.stageEmoji || '🙂'} ${p.nickname || 'Someone'}`).join('  ·  ')}
+      </p>
+    );
   }
 
   return (

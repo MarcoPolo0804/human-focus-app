@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ensureAudioContext, playAlarm } from '../lib/sound';
+import FloatingTimer from './FloatingTimer';
 
 const REST_SECONDS = 10 * 60;
 
@@ -51,6 +52,19 @@ export default function Timer({ onComplete, onAbandon, onRestChange }) {
     onAbandon();
   };
 
+  if (phase === 'focus') {
+    return (
+      <FloatingTimer
+        position="top"
+        label="Focusing"
+        time={formatTime(secondsLeft)}
+        actionLabel="Abandon Session"
+        actionVariant="danger"
+        onAction={abandon}
+      />
+    );
+  }
+
   return (
     <div className="timer">
       {phase === 'setup' && (
@@ -66,14 +80,6 @@ export default function Timer({ onComplete, onAbandon, onRestChange }) {
           />
           <button className="btn btn-primary" onClick={start}>
             Start Focus Session
-          </button>
-        </div>
-      )}
-      {phase === 'focus' && (
-        <div className="timer-running">
-          <div className="timer-display">{formatTime(secondsLeft)}</div>
-          <button className="btn btn-danger" onClick={abandon}>
-            Abandon Session
           </button>
         </div>
       )}
