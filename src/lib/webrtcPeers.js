@@ -1,4 +1,19 @@
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+// STUN alone can't always punch through NAT between two arbitrary networks —
+// a TURN relay is the fallback for those cases. Optional: set VITE_TURN_URL
+// (+ VITE_TURN_USERNAME / VITE_TURN_CREDENTIAL) in Vercel env vars once a
+// provider is picked; without them the app just runs STUN-only as before.
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  ...(import.meta.env.VITE_TURN_URL
+    ? [
+        {
+          urls: import.meta.env.VITE_TURN_URL,
+          username: import.meta.env.VITE_TURN_USERNAME,
+          credential: import.meta.env.VITE_TURN_CREDENTIAL,
+        },
+      ]
+    : []),
+];
 
 // Manages one WebRTC peer connection per buddy over an existing Supabase
 // realtime channel (used purely as a signaling relay via broadcast events).
