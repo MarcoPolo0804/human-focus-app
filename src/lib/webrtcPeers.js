@@ -2,8 +2,11 @@ const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 // Manages one WebRTC peer connection per buddy over an existing Supabase
 // realtime channel (used purely as a signaling relay via broadcast events).
-// Video is one-way-friendly: a side with no local camera still gets a
-// recvonly transceiver so it can watch a buddy who has theirs on.
+// Every connection's video transceiver is negotiated sendrecv from the start
+// (even if one side has no camera yet), so a camera turning on/off later is
+// just swapping the sent track via replaceTrack — no renegotiation needed.
+// Without this, whichever side lacked a camera when the connection first
+// formed would get permanently locked to recvonly and could never send.
 export function createPeerManager({ channel, myKey, onRemoteStream, onRemoteStreamClosed }) {
   const peers = new Map();
 
@@ -20,15 +23,12 @@ export function createPeerManager({ channel, myKey, onRemoteStream, onRemoteStre
 
   const createConnection = (remoteKey, localStream) => {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    const entry = { pc, pendingCandidates: [] };
+    const entry = { pc, pendingCandidates: [], sender: null };
     peers.set(remoteKey, entry);
 
-    const videoTrack = localStream?.getVideoTracks()[0];
-    if (videoTrack) {
-      pc.addTrack(videoTrack, localStream);
-    } else {
-      pc.addTransceiver('video', { direction: 'recvonly' });
-    }
+    const localTrack = localStream?.getVideoTracks()[0] || null;
+    const transceiver = pc.addTransceiver(localTrack || 'video', { direction: 'sendrecv' });
+    entry.sender = transceiver.sender;
 
     pc.onicecandidate = (e) => {
       if (e.candidate) sendSignal(remoteKey, 'ice', e.candidate.toJSON());
@@ -67,6 +67,15 @@ export function createPeerManager({ channel, myKey, onRemoteStream, onRemoteStre
     }
   };
 
+  // Called whenever the local camera turns on/off so every already-established
+  // connection starts/stops sending it, without needing a fresh offer/answer.
+  const setLocalStream = (stream) => {
+    const track = stream?.getVideoTracks()[0] || null;
+    peers.forEach((entry) => {
+      entry.sender?.replaceTrack(track).catch(() => {});
+    });
+  };
+
   const handleSignal = async ({ to, from, kind, data }, localStream) => {
     if (to !== myKey) return;
     let entry = peers.get(from);
@@ -92,5 +101,5 @@ export function createPeerManager({ channel, myKey, onRemoteStream, onRemoteStre
     }
   };
 
-  return { ensurePeer, closePeer, closeAll, handleSignal, hasPeer, peerKeys };
+  return { ensurePeer, closePeer, closeAll, handleSignal, hasPeer, peerKeys, setLocalStream };
 }

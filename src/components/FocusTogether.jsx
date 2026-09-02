@@ -110,8 +110,9 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
     localStreamRef.current = null;
     setLocalStream(null);
     setCameraOn(false);
-    peerManagerRef.current?.closeAll();
-    setRemoteStreams(new Map());
+    // Stop sending, but don't tear the connections down — a buddy whose camera
+    // is still on should keep being watchable even after ours turns off.
+    peerManagerRef.current?.setLocalStream(null);
   };
 
   const toggleCamera = async () => {
@@ -127,6 +128,9 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
       localStreamRef.current = stream;
       setLocalStream(stream);
       setCameraOn(true);
+      // Push the new track onto any connection that already existed (e.g. one
+      // the buddy opened first) — ensurePeer() below only handles brand-new peers.
+      peerManagerRef.current?.setLocalStream(stream);
       await channelRef.current?.track({ nickname, stageName: stage.name, stageEmoji: stage.milestoneEmoji, cameraOn: true });
     } catch {
       // Camera denied/unavailable — stay in the audio-only session instead of blocking it.
