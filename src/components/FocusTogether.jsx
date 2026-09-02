@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getPlayerId } from '../lib/playerId';
 import { generateRoomCode, roomLinkFor } from '../lib/room';
+import { createPeerManager } from '../lib/webrtcPeers';
 import FloatingTimer from './FloatingTimer';
 
 function formatTime(totalSeconds) {
@@ -20,21 +21,48 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [linkCopied, setLinkCopied] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStreams, setRemoteStreams] = useState(new Map());
 
+  const myKey = getPlayerId();
   const channelRef = useRef(null);
   const sessionStartRef = useRef(null);
   const durationRef = useRef(durationMinutes);
   const completedRef = useRef(false);
+  const peerManagerRef = useRef(null);
+  const localStreamRef = useRef(null);
 
   const joinChannel = (code) => {
     setConnectionError(false);
 
     const channel = supabase.channel(`focus-room-${code}`, {
-      config: { presence: { key: getPlayerId() }, broadcast: { self: true } },
+      config: { presence: { key: myKey }, broadcast: { self: true } },
+    });
+
+    peerManagerRef.current = createPeerManager({
+      channel,
+      myKey,
+      onRemoteStream: (key, stream) => {
+        setRemoteStreams((prev) => new Map(prev).set(key, stream));
+      },
+      onRemoteStreamClosed: (key) => {
+        setRemoteStreams((prev) => {
+          const next = new Map(prev);
+          next.delete(key);
+          return next;
+        });
+      },
     });
 
     channel.on('presence', { event: 'sync' }, () => {
-      setParticipants(Object.values(channel.presenceState()).flat());
+      const state = channel.presenceState();
+      setParticipants(Object.entries(state).map(([key, metas]) => ({ key, ...metas[0] })));
+    });
+
+    channel.on('presence', { event: 'leave' }, ({ key }) => {
+      peerManagerRef.current?.closePeer(key);
     });
 
     channel.on('broadcast', { event: 'session-start' }, ({ payload }) => {
@@ -45,6 +73,10 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
       setPhase('active');
     });
 
+    channel.on('broadcast', { event: 'webrtc-signal' }, ({ payload }) => {
+      peerManagerRef.current?.handleSignal(payload, localStreamRef.current);
+    });
+
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         setConnectionError(false);
@@ -52,6 +84,7 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
           nickname,
           stageName: stage.name,
           stageEmoji: stage.milestoneEmoji,
+          cameraOn: Boolean(localStreamRef.current),
         });
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         // The realtime socket failed to connect or dropped (flaky network, VPN/firewall
@@ -66,14 +99,77 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
 
   const retryConnection = () => {
     if (channelRef.current) supabase.removeChannel(channelRef.current);
+    peerManagerRef.current?.closeAll();
+    setRemoteStreams(new Map());
     setParticipants([]);
     joinChannel(roomCode);
   };
+
+  const stopCamera = () => {
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+    setLocalStream(null);
+    setCameraOn(false);
+    peerManagerRef.current?.closeAll();
+    setRemoteStreams(new Map());
+  };
+
+  const toggleCamera = async () => {
+    if (cameraOn) {
+      stopCamera();
+      channelRef.current?.track({ nickname, stageName: stage.name, stageEmoji: stage.milestoneEmoji, cameraOn: false });
+      return;
+    }
+
+    try {
+      setCameraError(false);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+      setCameraOn(true);
+      await channelRef.current?.track({ nickname, stageName: stage.name, stageEmoji: stage.milestoneEmoji, cameraOn: true });
+    } catch {
+      // Camera denied/unavailable — stay in the audio-only session instead of blocking it.
+      setCameraError(true);
+    }
+  };
+
+  // Connect to (or disconnect from) each buddy's video as camera state changes on
+  // either side. A one-way connection is fine: you can watch a buddy who has their
+  // camera on even while yours stays off.
+  useEffect(() => {
+    if (!peerManagerRef.current) return;
+
+    const activeKeys = new Set();
+    participants.forEach((p) => {
+      if (p.key === myKey) return;
+      if (cameraOn || p.cameraOn) {
+        activeKeys.add(p.key);
+        if (!peerManagerRef.current.hasPeer(p.key)) {
+          peerManagerRef.current.ensurePeer(p.key, { localStream: localStreamRef.current, initiator: myKey < p.key });
+        }
+      }
+    });
+
+    peerManagerRef.current.peerKeys().forEach((key) => {
+      if (!activeKeys.has(key)) peerManagerRef.current.closePeer(key);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participants, cameraOn]);
+
+  // Camera is only meaningful during an active session — drop it the moment we
+  // leave that phase instead of leaving a webcam light on in the background.
+  useEffect(() => {
+    if (phase !== 'active' && localStreamRef.current) stopCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   useEffect(() => {
     if (initialRoomCode) joinChannel(initialRoomCode);
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
+      peerManagerRef.current?.closeAll();
+      localStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -174,6 +270,14 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
         onAction={exitActiveSession}
       >
         <ParticipantList participants={participants} compact />
+        <CameraBuddy
+          cameraOn={cameraOn}
+          cameraError={cameraError}
+          onToggle={toggleCamera}
+          localStream={localStream}
+          remoteStreams={remoteStreams}
+          participants={participants}
+        />
         {connectionError && <ConnectionError onRetry={retryConnection} />}
       </FloatingTimer>
     );
@@ -266,6 +370,50 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function CameraBuddy({ cameraOn, cameraError, onToggle, localStream, remoteStreams, participants }) {
+  const remoteEntries = Array.from(remoteStreams.entries());
+
+  return (
+    <div className="camera-buddy">
+      {(cameraOn || remoteEntries.length > 0) && (
+        <div className="camera-tiles">
+          {cameraOn && <VideoTile stream={localStream} label="You" muted />}
+          {remoteEntries.map(([key, stream]) => {
+            const buddy = participants.find((p) => p.key === key);
+            return <VideoTile key={key} stream={stream} label={buddy?.nickname || 'Buddy'} muted />;
+          })}
+        </div>
+      )}
+      <button
+        type="button"
+        className={`btn btn-secondary camera-toggle ${cameraOn ? 'camera-toggle-active' : ''}`}
+        onClick={onToggle}
+      >
+        {cameraOn ? '📷 Turn off camera' : '📷 Turn on camera'}
+      </button>
+      {cameraError && <p className="camera-error">Couldn't access your camera. Check permissions and try again.</p>}
+      <p className="camera-mic-note">🔇 Mic is always off</p>
+    </div>
+  );
+}
+
+function VideoTile({ stream, label, muted }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = stream || null;
+  }, [stream]);
+
+  return (
+    <div className="camera-tile">
+      {/* Every stream here is video-only (getUserMedia was requested with audio:false),
+          but mute the element too so a buddy's tab can never emit audio either way. */}
+      <video ref={videoRef} autoPlay playsInline muted={muted !== false} className="camera-video" />
+      {label && <span className="camera-tile-label">{label}</span>}
     </div>
   );
 }
