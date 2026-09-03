@@ -3,7 +3,6 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getPlayerId } from '../lib/playerId';
 import { generateRoomCode, roomLinkFor } from '../lib/room';
 import FloatingTimer from './FloatingTimer';
-import JitsiCameraBuddy from './JitsiCameraBuddy';
 
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -21,8 +20,6 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [linkCopied, setLinkCopied] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
-  const [cameraOn, setCameraOn] = useState(false);
-  const [cameraError, setCameraError] = useState(false);
 
   const channelRef = useRef(null);
   const sessionStartRef = useRef(null);
@@ -72,17 +69,6 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
     setParticipants([]);
     joinChannel(roomCode);
   };
-
-  const toggleCamera = () => {
-    setCameraError(false);
-    setCameraOn((prev) => !prev);
-  };
-
-  // Camera is only meaningful during an active session — drop it the moment we
-  // leave that phase instead of leaving the call running in the background.
-  useEffect(() => {
-    if (phase !== 'active') setCameraOn(false);
-  }, [phase]);
 
   useEffect(() => {
     if (initialRoomCode) joinChannel(initialRoomCode);
@@ -188,26 +174,6 @@ export default function FocusTogether({ nickname, stage, initialRoomCode, onComp
         onAction={exitActiveSession}
       >
         <ParticipantList participants={participants} compact />
-        <div className="camera-buddy">
-          <button
-            type="button"
-            className={`btn btn-secondary camera-toggle ${cameraOn ? 'camera-toggle-active' : ''}`}
-            onClick={toggleCamera}
-          >
-            {cameraOn ? '📷 Turn off camera' : '📷 Turn on camera'}
-          </button>
-          {cameraOn && <p className="camera-mic-note">🔇 Mic is muted</p>}
-          {cameraError && <p className="camera-error">Video call failed to load. Check your connection and try again.</p>}
-          <JitsiCameraBuddy
-            active={cameraOn}
-            roomName={`human-focus-app-${roomCode}`}
-            nickname={nickname}
-            onError={() => {
-              setCameraError(true);
-              setCameraOn(false);
-            }}
-          />
-        </div>
         {connectionError && <ConnectionError onRetry={retryConnection} />}
       </FloatingTimer>
     );

@@ -1021,54 +1021,6 @@
   font-size: 13px;
 }
 
-.camera-buddy {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-}
-
-.jitsi-camera-buddy {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.jitsi-container {
-  width: 280px;
-  height: 200px;
-  max-width: calc(100vw - 64px);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #2d2a3d;
-}
-
-.camera-toggle {
-  padding: 6px 14px;
-  font-size: 12px;
-}
-
-.camera-toggle-active {
-  color: #d9534f;
-  border-color: #d9534f;
-}
-
-.camera-error {
-  font-size: 11px;
-  color: #a8433f;
-  text-align: center;
-  margin: 0;
-}
-
-.camera-mic-note {
-  font-size: 11px;
-  color: #6b6375;
-  margin: 0;
-}
-
 /* Illness indicator */
 .sick-banner {
   margin-top: 8px;
